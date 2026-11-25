@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Chakra Petch", "Noto Sans KR", system-ui, sans-serif;
+  --font-sans: "Noto Sans KR", system-ui, -apple-system, sans-serif;
+  --color-ow-orange: #fa9c1e;
+  --color-ow-cyan: #00c3ff;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #070b14;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(250, 156, 30, 0.12), transparent 36%),
+      radial-gradient(circle at 85% 15%, rgba(0, 195, 255, 0.1), transparent 38%),
+      linear-gradient(to bottom, rgba(15, 23, 42, 0.65), rgba(7, 11, 20, 0.98));
+    min-height: 100vh;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.ow-skew {
+  transform: skewX(-10deg);
+}
+
+.ow-unskew {
+  transform: skewX(10deg);
+}
+
+.ow-grid-bg {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 24px rgba(250, 156, 30, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 42px rgba(250, 156, 30, 0.65);
+  }
+}
+
+.animate-ow-glow {
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
