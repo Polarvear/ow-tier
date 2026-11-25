@@ -11,8 +11,25 @@ import type {
 } from '../shared/types';
 
 type Bindings = {
-  DB: D1Database;
+  DB?: D1Database;
   SIGNING_SECRET?: string;
+};
+
+interface MemoryStats {
+  totalRuns: number;
+  completedRunIds: Set<string>;
+  heroes: Map<string, { championshipCount: number; matchWins: number; matchLosses: number }>;
+}
+
+const memoryStore: MemoryStats = {
+  totalRuns: 0,
+  completedRunIds: new Set(),
+  heroes: new Map(
+    FEMALE_HEROES.map((h) => [
+      h.id,
+      { championshipCount: 0, matchWins: 0, matchLosses: 0 },
+    ]),
+  ),
 };
 
 interface HeroRow {
@@ -107,13 +124,43 @@ function mapRowsToRankings(rows: HeroRow[], totalRuns: number): HeroRanking[] {
   }));
 }
 
-async function fetchRankings(db: D1Database, roleFilter?: string): Promise<RankingsResponse> {
+async function fetchRankings(db?: D1Database, roleFilter?: string): Promise<RankingsResponse> {
+  const validRoles = new Set(['tank', 'damage', 'support']);
+
+  if (!db) {
+    const rows: HeroRow[] = FEMALE_HEROES.filter(
+      (h) => !roleFilter || !validRoles.has(roleFilter) || h.role === roleFilter,
+    ).map((h) => {
+      const stat = memoryStore.heroes.get(h.id) ?? {
+        championshipCount: 0,
+        matchWins: 0,
+        matchLosses: 0,
+      };
+      return {
+        id: h.id,
+        name_ko: h.nameKo,
+        name_en: h.nameEn,
+        role: h.role,
+        image_url: h.imageUrl,
+        tagline: h.tagline,
+        accent_color: h.accentColor,
+        is_omnic: h.isOmnic ? 1 : 0,
+        championship_count: stat.championshipCount,
+        match_wins: stat.matchWins,
+        match_losses: stat.matchLosses,
+      };
+    });
+    return {
+      totalRuns: memoryStore.totalRuns,
+      rankings: mapRowsToRankings(rows, memoryStore.totalRuns),
+    };
+  }
+
   const countResult = await db
     .prepare('SELECT COUNT(*) as total FROM tournament_runs')
     .first<{ total: number }>();
   const totalRuns = Number(countResult?.total ?? 0);
 
-  const validRoles = new Set(['tank', 'damage', 'support']);
   const query =
     roleFilter && validRoles.has(roleFilter)
       ? db
@@ -238,6 +285,34 @@ app.post('/api/tournaments/complete', async (c) => {
     }
     winCounts.set(vote.winnerId, (winCounts.get(vote.winnerId) ?? 0) + 1);
     lossCounts.set(vote.loserId, (lossCounts.get(vote.loserId) ?? 0) + 1);
+  }
+
+  if (!c.env.DB) {
+    if (!memoryStore.completedRunIds.has(runId)) {
+      memoryStore.completedRunIds.add(runId);
+      memoryStore.totalRuns += 1;
+      const champStat = memoryStore.heroes.get(winnerHeroId);
+      if (champStat) {
+        champStat.championshipCount += 1;
+      }
+      const touchedHeroIds = new Set([...winCounts.keys(), ...lossCounts.keys()]);
+      for (const heroId of touchedHeroIds) {
+        const stat = memoryStore.heroes.get(heroId);
+        if (stat) {
+          stat.matchWins += winCounts.get(heroId) ?? 0;
+          stat.matchLosses += lossCounts.get(heroId) ?? 0;
+        }
+      }
+    }
+
+    const data = await fetchRankings(undefined);
+    const winnerStats = data.rankings.find((h) => h.id === winnerHeroId) ?? null;
+    const response: CompleteTournamentResponse = {
+      ok: true,
+      totalRuns: data.totalRuns,
+      winnerStats,
+    };
+    return c.json(response);
   }
 
   // Prevent duplicate submission for the same runId
